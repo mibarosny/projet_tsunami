@@ -1,2 +1,0 @@
-Number of elem 0 
-Number of local values per element 3 
