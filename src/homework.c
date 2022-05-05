@@ -15,26 +15,26 @@ typedef struct {
     // *FV = FE + 2*size
 } femTsunamiProblem;
 
+double  xLoc[3],yLoc[3],phi[3],dphidx[3],dphidy[3];
+double  xsi,eta,weight,jac;
+double  y,e,u,v,x,h;
+int     i,j,k,el,elem,mapElem[3],mapEdge[2][2];
+
 void tsunamiComputeInitialize(femTsunamiProblem * problem) {
-    double * nodes = problem->nodes; 
-    int * elems = problem->elems; 
-    for (int el = 0; el < problem->nElem; el++)
-        for (int i = 0; i < 3; i++) {
-            problem->E[el*3+i] = tsunamiInitialConditionOkada(nodes[3*elems[el*3+i]], nodes[3*elems[el*3+i]+1]);
+    for (el = 0; el < problem->nElem; el++)
+        for (i = 0; i < 3; i++) {
+            problem->E[el*3+i] = tsunamiInitialConditionOkada(problem->nodes[3*problem->elems[el*3+i]],
+                                                              problem->nodes[3*problem->elems[el*3+i]+1]);
             problem->E[problem->size +   el*3+i] = 0.;
             problem->E[problem->size*2 + el*3+i] = 0.;
         }
 }
 
 void femShallowTriangleMap(int index, int map[3]) {
-    for (int i = 0; i < 3; i++) 
-        map[i] = index*3 + i;
+    for (i = 0; i < 3; i++)  map[i] = index*3 + i;
 }
 
-int ff = 0;
-void femShallowEdgeMap(femTsunamiProblem *myProblem, int index, int map[2][2])
-{
-    int i,j,k;   
+void femShallowEdgeMap(femTsunamiProblem *myProblem, int index, int map[2][2]) {
     for (j=0; j < 2; ++j) {
         int node = myProblem->edges[index*4 + j];
         for (k=0; k < 2; k++) {
@@ -48,26 +48,14 @@ void femShallowEdgeMap(femTsunamiProblem *myProblem, int index, int map[2][2])
 
 void femDiscretePhi(int n, double xsi, double eta, double * phi) {
     if (n == 2) {
-        phi[0] = 1 - xsi - eta;  
-        phi[1] = xsi;
-        phi[2] = eta;
+        phi[0] = 1 - xsi - eta; phi[1] = xsi; phi[2] = eta;
     } else {
-        phi[0] = (1.0 - xsi)/2.0;
-        phi[1] = (1.0 + xsi)/2.0;  
+        phi[0] = (1.0 - xsi)/2.0; phi[1] = (1.0 + xsi)/2.0;  
     }
 }
 
-double interpolateClassic(double *phi, double *U, int *map, int n)
-{
-    double u = 0.0; int i;
-    for (i=0; i <n; i++)
-        u += phi[i]*U[map[i]];
-    return u;
-}
-
-double interpolate(double *phi, double *U, int *map, int e, int p, int n)
-{
-    double u = 0.0; int i;
+double interpolate(double *phi, double *U, int *map, int e, int p, int n) {
+    double u = 0.0;
     for (i=0; i < n; i++)
         u += phi[i]*U[e*map[i]+p];
     return u;
@@ -80,17 +68,11 @@ void femShallowAddIntegralsElements(femTsunamiProblem * myProblem) {
     double *E = myProblem->E;
     double *U = myProblem->E + myProblem->size;
     double *V = myProblem->E + 2*myProblem->size;    
-       
-    double  xLoc[3],yLoc[3],phi[3],dphidx[3],dphidy[3];
-    double  xsi,eta,weight,jac;
-    double  y,e,u,v,x,h;
-    int     i,j,k,elem,mapElem[3];
 
-    int n = 3;
     for (elem=0; elem < myProblem->nElem; elem++) {
         femShallowTriangleMap(elem, mapElem);
-        int *mapCoord = &(myProblem->elems[elem*n]);
-        for (j=0; j < n; ++j) {
+        int *mapCoord = &(myProblem->elems[elem*3]);
+        for (j=0; j < 3; ++j) {
         	  xLoc[j] = myProblem->nodes[3*mapCoord[j]];
         	  yLoc[j] = myProblem->nodes[3*mapCoord[j]+1]; }
         jac = (xLoc[1] - xLoc[0]) * (yLoc[2] - yLoc[0]) - (yLoc[1] - yLoc[0]) * (xLoc[2] - xLoc[0]);
@@ -105,18 +87,17 @@ void femShallowAddIntegralsElements(femTsunamiProblem * myProblem) {
             eta = gaussTriangleEta[k];
             weight = gaussTriangleWeight[k];     
             femDiscretePhi(2,xsi,eta,phi);               
-            x = interpolate(phi, myProblem->nodes, mapCoord, 3, 0, n); 
-            y = interpolate(phi, myProblem->nodes, mapCoord, 3, 1, n); 
-            h = interpolate(phi, myProblem->nodes, mapCoord, 3, 2, n); 
-            e = interpolate(phi,E,mapElem,1,0,n);
-            u = interpolate(phi,U,mapElem,1,0,n);
-            v = interpolate(phi,V,mapElem,1,0,n);
-            //if (elem == 0 && k == 0)
-            //printf("%f %f %f %f %f %f \n", y, x, h, e, u, v);
+            x = interpolate(phi, myProblem->nodes, mapCoord, 3, 0, 3); 
+            y = interpolate(phi, myProblem->nodes, mapCoord, 3, 1, 3); 
+            h = interpolate(phi, myProblem->nodes, mapCoord, 3, 2, 3); 
+            e = interpolate(phi,E,mapElem,1,0,3);
+            u = interpolate(phi,U,mapElem,1,0,3);
+            v = interpolate(phi,V,mapElem,1,0,3);
             
-            double z3d = (4*R*R - x*x - y*y) / (4*R*R + x*x + y*y);
-            double coriolis = 2.*Omega*z3d/R;     
-            for (i=0; i < n; i++) {
+            double z3d = R*(4*R*R - x*x - y*y) / (4*R*R + x*x + y*y);
+  	        double lat = asin(z3d/R)*180/PI;
+            double coriolis = 2.*Omega*sin(lat);     
+            for (i=0; i < 3; i++) {
                 BE[mapElem[i]] += ( (dphidx[i]*h*u + dphidy[i]*h*v)*((4.*R*R+x*x+y*y)/(4.*R*R))
                                 + phi[i]*h*((x*u+y*v)/(R*R)) )*jac*weight;
                 BU[mapElem[i]] += ( phi[i]*(coriolis*v - Gamma*u) + dphidx[i]*g*e*((4.*R*R+x*x+y*y)/(4.*R*R))
@@ -137,23 +118,20 @@ void femShallowAddIntegralsEdges(femTsunamiProblem * myProblem) {
     double *U = myProblem->E + myProblem->size;
     double *V = myProblem->E + 2*myProblem->size;   
     
-    double  xEdge[2],yEdge[2],phiEdge[2];
-    double  xsi,weight,jac;
     double  eL,eR,uL,uR,vL,vR,unL,unR;
     double  qe,qu,qv,x,y,h,factor;
-    int     i,j,k,edge,mapEdge[2][2];
 
-    for (edge=0; edge < myProblem->nEdge; edge++) {
+    for (int edge=0; edge < myProblem->nEdge; edge++) {
         femShallowEdgeMap(myProblem,edge,mapEdge);
         for (j=0; j < 2; ++j) {
         	  int node = myProblem->edges[edge*4 + j];
-        	  xEdge[j] = myProblem->nodes[node*3];
-        	  yEdge[j] = myProblem->nodes[node*3 + 1]; }
+        	  xLoc[j] = myProblem->nodes[node*3];
+        	  yLoc[j] = myProblem->nodes[node*3 + 1]; }
         int *mapCoord = &(myProblem->edges[edge*4]);
         int boundary = (mapEdge[1][0] == myProblem->size-1);
         
-        double dxdxsi = (xEdge[1] - xEdge[0]);
-        double dydxsi = (yEdge[1] - yEdge[0]);
+        double dxdxsi = (xLoc[1] - xLoc[0]);
+        double dydxsi = (yLoc[1] - yLoc[0]);
         double norm = sqrt(dxdxsi*dxdxsi + dydxsi*dydxsi);
         double nx =  dydxsi/norm;
         double ny = -dxdxsi/norm;
@@ -161,17 +139,17 @@ void femShallowAddIntegralsEdges(femTsunamiProblem * myProblem) {
         for (k=0; k < 2; k++) {
             xsi = gaussEdgeXsi[k];
             weight = gaussEdgeWeight[k];     
-            femDiscretePhi(1,xsi,xsi,phiEdge);           
+            femDiscretePhi(1,xsi,xsi,phi);           
             
-            eL = interpolate(phiEdge,E,mapEdge[0],1,0,2);
-            eR = boundary ? eL : interpolate(phiEdge,E,mapEdge[1],1,0,2);
-            uL = interpolate(phiEdge,U,mapEdge[0],1,0,2);
-            uR = interpolate(phiEdge,U,mapEdge[1],1,0,2);
-            vL = interpolate(phiEdge,V,mapEdge[0],1,0,2);
-            vR = interpolate(phiEdge,V,mapEdge[1],1,0,2);
-            y = interpolate(phiEdge,myProblem->nodes,mapCoord,3,1,2);
-            x = interpolate(phiEdge,myProblem->nodes,mapCoord,3,0,2);
-            h = interpolate(phiEdge,myProblem->nodes,mapCoord,3,2,2);
+            eL = interpolate(phi,E,mapEdge[0],1,0,2);
+            eR = boundary ? eL : interpolate(phi,E,mapEdge[1],1,0,2);
+            uL = interpolate(phi,U,mapEdge[0],1,0,2);
+            uR = interpolate(phi,U,mapEdge[1],1,0,2);
+            vL = interpolate(phi,V,mapEdge[0],1,0,2);
+            vR = interpolate(phi,V,mapEdge[1],1,0,2);
+            y = interpolate(phi,myProblem->nodes,mapCoord,3,1,2);
+            x = interpolate(phi,myProblem->nodes,mapCoord,3,0,2);
+            h = interpolate(phi,myProblem->nodes,mapCoord,3,2,2);
             unL = uL*nx+ vL*ny;
             unR = boundary ? -unL : uR*nx + vR*ny;
             factor = (4.*R*R+x*x+y*y)/(4.*R*R);
@@ -180,12 +158,12 @@ void femShallowAddIntegralsEdges(femTsunamiProblem * myProblem) {
             qu =  0.5*g*nx*( ( eL+eR ) + sqrt(h/g)*(unL-unR) )*factor;
             qv =  0.5*g*ny*( ( eL+eR ) + sqrt(h/g)*(unL-unR) )*factor;        
             for (i=0; i < 2; i++) {
-                BE[mapEdge[0][i]] -= qe*phiEdge[i]*jac*weight; 
-                BU[mapEdge[0][i]] -= qu*phiEdge[i]*jac*weight; 
-                BV[mapEdge[0][i]] -= qv*phiEdge[i]*jac*weight; 
-                BE[mapEdge[1][i]] += qe*phiEdge[i]*jac*weight;
-                BU[mapEdge[1][i]] += qu*phiEdge[i]*jac*weight;
-                BV[mapEdge[1][i]] += qv*phiEdge[i]*jac*weight; }}}
+                BE[mapEdge[0][i]] -= qe*phi[i]*jac*weight; 
+                BU[mapEdge[0][i]] -= qu*phi[i]*jac*weight; 
+                BV[mapEdge[0][i]] -= qv*phi[i]*jac*weight; 
+                BE[mapEdge[1][i]] += qe*phi[i]*jac*weight;
+                BU[mapEdge[1][i]] += qu*phi[i]*jac*weight;
+                BV[mapEdge[1][i]] += qv*phi[i]*jac*weight; }}}
 
 }
 
@@ -196,9 +174,6 @@ void femShallowMultiplyInverseMatrix(femTsunamiProblem * myProblem) {
          
     double invA[3][3] = {{18.0,-6.0,-6.0},{-6.0,18.0,-6.0},{-6.0,-6.0,18.0}};
     double BEloc[3],BUloc[3],BVloc[3];
- 
-    double xLoc[3],yLoc[3],jac;
-    int    elem,i,j,mapElem[3];
     
     for (elem=0; elem < myProblem->nElem; elem++) {
         femShallowTriangleMap(elem, mapElem);
@@ -223,13 +198,11 @@ void femShallowMultiplyInverseMatrix(femTsunamiProblem * myProblem) {
 
 
 void tsunamiUpdateRungeKutta(femTsunamiProblem * myProblem, double dt) {
-    static int iti = 0;
-    int i, j, size = myProblem->size;
     double  *E = myProblem->E;
-    double * Eold        = malloc(sizeof(double)*size*3);
-    double * Epredictor  = malloc(sizeof(double)*size*3);
+    double * Eold        = malloc(sizeof(double)*myProblem->size*3);
+    double * Epredictor  = malloc(sizeof(double)*myProblem->size*3);
     double  *FE = myProblem->FE;
-    for (i=0; i < size*3; i++) {
+    for (i=0; i < myProblem->size*3; i++) {
         FE[i] = 0.0;
         Eold[i] = E[i];  
     }
@@ -239,7 +212,7 @@ void tsunamiUpdateRungeKutta(femTsunamiProblem * myProblem, double dt) {
     const double gamma[2] = {1./2., 1./2.};
     
     for (j = 0; j < nStage; j++) {
-        for (i=0; i < size*3; i++) 
+        for (i=0; i < myProblem->size*3; i++) 
             Epredictor[i] = Eold[i] + dt * beta[j] * FE[i];
         
         myProblem->E = Epredictor;
@@ -250,7 +223,7 @@ void tsunamiUpdateRungeKutta(femTsunamiProblem * myProblem, double dt) {
         
         femShallowMultiplyInverseMatrix(myProblem);
 
-        for (i=0; i < size*3; i++) 
+        for (i=0; i < myProblem->size*3; i++) 
             E[i] += dt * gamma[j] * FE[i]; 
         
     }
@@ -281,14 +254,14 @@ void tsunamiUpdateRungeKutta(femTsunamiProblem * myProblem, double dt) {
 }
 
 void euler(femTsunamiProblem * myProblem, double dt) {
-    for (int i = 0; i < myProblem->size * 3; i++) {
+    for (i = 0; i < myProblem->size * 3; i++) {
         myProblem->FE[i] = 0.0;
     }
 
     femShallowAddIntegralsElements(myProblem);
     femShallowAddIntegralsEdges(myProblem);
     femShallowMultiplyInverseMatrix(myProblem);
-    for (int j=0; j < myProblem->size * 3; j++) {
+    for (j=0; j < myProblem->size * 3; j++) {
         myProblem->E[j] += dt * myProblem->FE[j];
     }
 }
@@ -339,7 +312,7 @@ void tsunamiCompute(double dt, int nmax, int sub, const char *meshFileName, cons
 
     for (int it = 0; it < nmax; it++) {
         
-        tsunamiUpdateRungeKutta(problem, dt);
+        euler(problem, dt);
         
         if ((it+1)%sub == 0)
             tsunamiWriteFile(baseResultName,(it+1),problem->E+problem->size,problem->E+2*problem->size,problem->E,problem->nElem,3); 
